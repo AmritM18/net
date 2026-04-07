@@ -3549,20 +3549,31 @@ func testTransportNoBodyMeansNoDATA(t testing.TB) {
 	}
 }
 
-func benchSimpleRoundTrip(b *testing.B, nReqHeaders, nResHeader int) {
+func benchHeaderName(i int) string {
+	return fmt.Sprint("A-", i)
+}
+
+func benchNeverIndexed(n int) *HeaderNames {
+	h := &HeaderNames{}
+	for i := range n {
+		h.Add(benchHeaderName(i))
+	}
+	return h
+}
+
+func benchSimpleRoundTrip(b *testing.B, nReqHeaders, nResHeader int, neverIndexed *HeaderNames) {
 	DisableGoroutineTracking(b)
 	b.ReportAllocs()
 	ts := newTestServer(b,
 		func(w http.ResponseWriter, r *http.Request) {
 			for i := 0; i < nResHeader; i++ {
-				name := fmt.Sprint("A-", i)
-				w.Header().Set(name, "*")
+				w.Header().Set(benchHeaderName(i), "*")
 			}
 		},
 		optQuiet,
 	)
 
-	tr := &Transport{TLSClientConfig: tlsConfigInsecure}
+	tr := &Transport{TLSClientConfig: tlsConfigInsecure, NeverIndexedHeaders: neverIndexed}
 	defer tr.CloseIdleConnections()
 
 	req, err := http.NewRequest("GET", ts.URL, nil)
@@ -3571,8 +3582,7 @@ func benchSimpleRoundTrip(b *testing.B, nReqHeaders, nResHeader int) {
 	}
 
 	for i := 0; i < nReqHeaders; i++ {
-		name := fmt.Sprint("A-", i)
-		req.Header.Set(name, "*")
+		req.Header.Set(benchHeaderName(i), "*")
 	}
 
 	b.ResetTimer()
@@ -3644,17 +3654,19 @@ func testTransportHandlesInvalidStatuslessResponse(t testing.TB) {
 }
 
 func BenchmarkClientRequestHeaders(b *testing.B) {
-	b.Run("   0 Headers", func(b *testing.B) { benchSimpleRoundTrip(b, 0, 0) })
-	b.Run("  10 Headers", func(b *testing.B) { benchSimpleRoundTrip(b, 10, 0) })
-	b.Run(" 100 Headers", func(b *testing.B) { benchSimpleRoundTrip(b, 100, 0) })
-	b.Run("1000 Headers", func(b *testing.B) { benchSimpleRoundTrip(b, 1000, 0) })
+	b.Run("   0 Headers", func(b *testing.B) { benchSimpleRoundTrip(b, 0, 0, nil) })
+	b.Run("  10 Headers", func(b *testing.B) { benchSimpleRoundTrip(b, 10, 0, nil) })
+	b.Run(" 100 Headers", func(b *testing.B) { benchSimpleRoundTrip(b, 100, 0, nil) })
+	b.Run("1000 Headers", func(b *testing.B) { benchSimpleRoundTrip(b, 1000, 0, nil) })
+	b.Run("  10 Headers NeverIndexed", func(b *testing.B) { benchSimpleRoundTrip(b, 10, 0, benchNeverIndexed(10)) })
+	b.Run(" 100 Headers NeverIndexed", func(b *testing.B) { benchSimpleRoundTrip(b, 100, 0, benchNeverIndexed(100)) })
 }
 
 func BenchmarkClientResponseHeaders(b *testing.B) {
-	b.Run("   0 Headers", func(b *testing.B) { benchSimpleRoundTrip(b, 0, 0) })
-	b.Run("  10 Headers", func(b *testing.B) { benchSimpleRoundTrip(b, 0, 10) })
-	b.Run(" 100 Headers", func(b *testing.B) { benchSimpleRoundTrip(b, 0, 100) })
-	b.Run("1000 Headers", func(b *testing.B) { benchSimpleRoundTrip(b, 0, 1000) })
+	b.Run("   0 Headers", func(b *testing.B) { benchSimpleRoundTrip(b, 0, 0, nil) })
+	b.Run("  10 Headers", func(b *testing.B) { benchSimpleRoundTrip(b, 0, 10, nil) })
+	b.Run(" 100 Headers", func(b *testing.B) { benchSimpleRoundTrip(b, 0, 100, nil) })
+	b.Run("1000 Headers", func(b *testing.B) { benchSimpleRoundTrip(b, 0, 1000, nil) })
 }
 
 func BenchmarkDownloadFrameSize(b *testing.B) {

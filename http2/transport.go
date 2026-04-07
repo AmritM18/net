@@ -171,6 +171,11 @@ type Transport struct {
 	// available to write, and is extended whenever any bytes are written.
 	WriteByteTimeout time.Duration
 
+	// NeverIndexedHeaders specifies header names that should never be
+	// indexed in HPACK dynamic tables. Header names are matched
+	// case-insensitively.
+	NeverIndexedHeaders *HeaderNames
+
 	// CountError, if non-nil, is called on HTTP/2 transport errors.
 	// It's intended to increment a metric for monitoring, such
 	// as an expvar or Prometheus metric.
@@ -2057,7 +2062,11 @@ func (cc *ClientConn) writeHeader(name, value string) {
 	if VerboseLogs {
 		log.Printf("http2: Transport encoding header %q = %q", name, value)
 	}
-	cc.henc.WriteField(hpack.HeaderField{Name: name, Value: value})
+	cc.henc.WriteField(hpack.HeaderField{
+		Name:      name,
+		Value:     value,
+		Sensitive: cc.t.NeverIndexedHeaders.contains(name),
+	})
 }
 
 type resAndError struct {
